@@ -2,3 +2,4 @@ python-telegram-bot[job-queue]
 httpx
 telethon
 flask
+pytz
