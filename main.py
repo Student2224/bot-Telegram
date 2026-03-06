@@ -11,6 +11,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telegram.ext import Application, JobQueue
+from datetime import datetime, time
 
 # ===== Конфигурация =====
 logging.basicConfig(
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 MEXC_TICKER_URL = "https://api.mexc.com/api/v3/ticker/price"
 API_ID = 32990800
 API_HASH = "f14259b31ea4bc638814833d6de13bd5"
-TARGET_GROUP_USERNAME = "@alert_gamno"
+TARGET_GROUP_USERNAME = "@alertgomno2"
 TELEGRAM_BOT_TOKEN = "8213546201:AAFIFDmFqtjibgd9CkfsGGgWnb1_tTXfe8c"
 
 # 🚨 ВАЖНО: Сессия Telethon передаётся через переменную окружения
@@ -113,6 +114,16 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Ничего не отслеживается.")
 
 async def price_monitor_loop(context: ContextTypes.DEFAULT_TYPE) -> None:
+    now = datetime.now().time()
+    start_time = time(5, 0)   # 5:00 AM
+    end_time = time(21, 0)    # 9:00 PM
+
+    # 🚫 Если сейчас не в рабочем интервале — выходим
+    if not (start_time <= now <= end_time):
+        logger.info("🕒 Сейчас вне рабочего времени (5:00–21:00). Пропускаем мониторинг.")
+        return
+
+    logger.info("⏳ Запуск мониторинга цен (рабочее время)...")
     telethon_client = context.bot_data.get("telethon_client")
     if telethon_client is None:
         logger.warning("Telethon-клиент не найден в контексте.")
