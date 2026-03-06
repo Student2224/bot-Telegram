@@ -10,6 +10,7 @@ from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telethon import TelegramClient
 from telethon.sessions import StringSession
+from telegram.ext import Application, JobQueue
 
 # ===== Конфигурация =====
 logging.basicConfig(
@@ -160,7 +161,7 @@ async def main():
     telethon_client = await init_telethon_client()
 
     # 2. Создаём Telegram-бота
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).job_queue(JobQueue()).build()
 
     # Регистрация команд
     app.add_handler(CommandHandler("start", start))
