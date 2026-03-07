@@ -84,7 +84,7 @@ async def price_monitor_loop(context: ContextTypes.DEFAULT_TYPE) -> None:
     tracking = context.bot_data["tracking"]  # {chat_id: List[CoinInfo]}
 
     # Проверка подключения Telethon
-    if not telethon_client.is_connected():
+    if not await telethon_client.is_connected():
         logger.warning("⚠️ Telethon клиент не подключен. Переподключение...")
         try:
             await telethon_client.connect()
@@ -266,5 +266,6 @@ if __name__ == "__main__":
         logger.info("🛑 Бот остановлен пользователем.")
     except Exception as e:
         logger.error(f"❌ Критическая ошибка: {e}")
+
 
 
