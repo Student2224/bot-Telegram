@@ -2,181 +2,109 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
-from decimal import Decimal
-
+from typing import List, Optional, Dict
 import httpx
-from flask import Flask
-from telegram import Update, BotCommand
-from telegram.ext import Application, CommandHandler, ContextTypes, JobQueue
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    JobQueue,
+)
 from telethon import TelegramClient
 from telethon.sessions import StringSession
-from datetime import datetime, time
 
-# ===== Конфигурация =====
+# --- Конфигурация ---
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+MEXC_TICKER_URL = "https://api.mexc.com/api/v3/ticker/price"
+TELETHON_API_ID = int(os.getenv("TELETHON_API_ID"))
+TELETHON_API_HASH = os.getenv("TELETHON_API_HASH")
+TELETHON_SESSION_STRING = os.getenv("TELETHON_SESSION_STRING")
+CHECK_INTERVAL = 2  # секунд
+TARGET_CHAT_ID = int(os.getenv("TARGET_CHAT_ID"))  # куда отправлять уведомления
+
+# --- Логирование ---
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
-MEXC_TICKER_URL = "https://api.mexc.com/api/v3/ticker/price"
-API_ID = int(os.getenv("API_ID", 0))  # 👈 Возвращает 0, если не задано
-API_HASH = os.getenv("API_HASH", "")
-TARGET_GROUP_USERNAME = os.getenv("TARGET_GROUP_USERNAME", "")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
-
-# 🚨 ВАЖНО: Сессия Telethon передаётся через переменную окружения
-SESSION_STRING = os.getenv("TELETHON_SESSION_STRING")
-
-# ===== Состояние бота =====
+# --- Данные монеты ---
 @dataclass
 class CoinInfo:
     symbol: str
     target_price: float
-    direction: str = "above"
+    direction: str  # "above" или "below"
 
-@dataclass
-class BotState:
-    tracking: Dict[int, List[CoinInfo]] = field(default_factory=dict)  # 👈 Теперь список монет на пользователя
+    def __eq__(self, other):
+        return isinstance(other, CoinInfo) and self.symbol == other.symbol
 
-state = BotState()
+    def __hash__(self):
+        return hash(self.symbol)
 
-# ===== Функции =====
-async def fetch_price(symbol: str) -> Optional[float]:
+
+# --- Инициализация Telethon ---
+async def init_telethon_client() -> TelegramClient:
+    client = TelegramClient(StringSession(TELETHON_SESSION_STRING), TELETHON_API_ID, TELETHON_API_HASH)
+    await client.connect()
+    if not await client.is_connected():
+        raise RuntimeError("Не удалось подключиться к Telethon")
+    logger.info("✅ Telethon клиент инициализирован")
+    return client
+
+
+# --- HTTP-запрос цены ---
+async def fetch_price(symbol: str, http_client: httpx.AsyncClient) -> Optional[float]:
     params = {"symbol": symbol.upper()}
-    async with httpx.AsyncClient(timeout=10) as client:
-        try:
-            resp = await client.get(MEXC_TICKER_URL, params=params)
-            resp.raise_for_status()
-            return float(resp.json()["price"])
-        except Exception as exc:
-            logger.error(f"Ошибка при получении цены для {symbol}: {exc}")
-            return None
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
-        "Привет! Я отслеживаю цены на MEXC.\n"
-        "Используй:\n"
-        "/add SYMBOL TARGET [above|below] — добавить монету\n"
-        "/list — посмотреть все отслеживаемые\n"
-        "/remove N — удалить монету по номеру\n"
-        "Пример: /add BTCUSDT 67000 above"
-    )
-
-async def add_coin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    args = context.args
-    if len(args) not in (2, 3):
-        await update.message.reply_text(
-            "❌ Использование: /add <символ> <цена> [above|below]\n"
-            "Пример: /add BTCUSDT 67000 above"
-        )
-        return
-
-    symbol = args[0].upper().strip()
     try:
-        target_price = float(args[1])
-    except ValueError:
-        await update.message.reply_text("❌ Цена должна быть числом!")
-        return
-
-    if len(args) == 3:
-        direction = args[2].lower().strip()
-        if direction not in ("above", "below"):
-            await update.message.reply_text("❌ Направление должно быть 'above' или 'below'!")
-            return
-    else:
-        current_price = await fetch_price(symbol)
-        if current_price is None:
-            await update.message.reply_text("❌ Не удалось получить текущую цену.")
-            return
-        direction = "above" if target_price > current_price else "below"
-
-    chat_id = update.effective_chat.id
-
-    # Инициализируем список для пользователя, если ещё не создан
-    if chat_id not in state.tracking:
-        state.tracking[chat_id] = []
-
-    # Проверка на дубликаты (точно такая же монета уже есть?)
-    for coin in state.tracking[chat_id]:
-        if (coin.symbol == symbol and
-            abs(coin.target_price - target_price) < 0.01 and
-            coin.direction == direction):
-            await update.message.reply_text(f"⚠️ {symbol} ({direction} {target_price}) уже отслеживается!")
-            return
-
-    # Добавляем новую монету
-    new_coin = CoinInfo(symbol=symbol, target_price=target_price, direction=direction)
-    state.tracking[chat_id].append(new_coin)
-
-    await update.message.reply_text(f"✅ {symbol} ({direction} {target_price:.4f}) добавлен в отслеживание!")
-
-async def list_coins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
-    if chat_id not in state.tracking or not state.tracking[chat_id]:
-        await update.message.reply_text("📭 Вы пока не отслеживаете ни одну монету. Используйте /add")
-        return
-
-    coins = state.tracking[chat_id]
-    message = "📋 Ваши отслеживаемые монеты:\n\n"
-    for i, coin in enumerate(coins, 1):
-        message += f"{i}. {coin.symbol} → {coin.direction} {coin.target_price:.4f}\n"
-
-    await update.message.reply_text(message)
-
-async def remove_coin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    args = context.args
-    if not args:
-        await update.message.reply_text("❌ Использование: /remove <номер>\nПример: /remove 2")
-        return
-
-    try:
-        index = int(args[0]) - 1  # Пользователь вводит 1, 2, 3 → индекс 0, 1, 2
-    except ValueError:
-        await update.message.reply_text("❌ Введите число!")
-        return
-
-    chat_id = update.effective_chat.id
-    if chat_id not in state.tracking or index < 0 or index >= len(state.tracking[chat_id]):
-        await update.message.reply_text("❌ Неверный номер монеты!")
-        return
-
-    removed = state.tracking[chat_id].pop(index)
-    await update.message.reply_text(f"🗑️ Удалено: {removed.symbol} ({removed.direction} {removed.target_price:.2f})")
-
-async def telethon_send_message(client: TelegramClient, text: str) -> None:
-    try:
-        await client.send_message(TARGET_GROUP_USERNAME, text)
-        logger.info(f"📤 Отправлено сообщение в группу {TARGET_GROUP_USERNAME}: {text}")
+        resp = await http_client.get(MEXC_TICKER_URL, params=params, timeout=10.0)
+        resp.raise_for_status()
+        data = resp.json()
+        return float(data["price"])
     except Exception as exc:
-        logger.error(f"❌ Не удалось отправить сообщение в группу {TARGET_GROUP_USERNAME}: {exc}")
+        logger.error(f"Ошибка при получении цены для {symbol}: {exc}")
+        return None
 
+
+# --- Отправка сообщения через Telethon ---
+async def telethon_send_message(client: TelegramClient, message: str) -> None:
+    try:
+        await client.send_message(TARGET_CHAT_ID, message)
+        logger.info(f"📤 Отправлено сообщение: {message[:50]}...")
+    except Exception as exc:
+        logger.error(f"❌ Ошибка отправки через Telethon: {exc}")
+
+
+# --- Мониторинг цен ---
 async def price_monitor_loop(context: ContextTypes.DEFAULT_TYPE) -> None:
-    now = datetime.now().time()
-    start_time = time(5, 0)   # 5:00 AM
-    end_time = time(21, 0)    # 9:00 PM
+    http_client = context.bot_data["http_client"]
+    telethon_client = context.bot_data["telethon_client"]
+    tracking = context.bot_data["tracking"]  # {chat_id: List[CoinInfo]}
 
-    # 🚫 Если сейчас не в рабочем интервале — выходим
-    if not (start_time <= now <= end_time):
-        logger.info("🕒 Сейчас вне рабочего времени (5:00–21:00). Пропускаем мониторинг.")
-        return
+    # Проверка подключения Telethon
+    if not telethon_client.is_connected():
+        logger.warning("⚠️ Telethon клиент не подключен. Переподключение...")
+        try:
+            await telethon_client.connect()
+            logger.info("✅ Telethon переподключен.")
+        except Exception as e:
+            logger.error(f"❌ Не удалось переподключить Telethon: {e}")
+            return
 
-    logger.info("⏳ Запуск мониторинга цен (рабочее время)...")
+    # Копируем список для безопасного итерирования
+    for chat_id in list(tracking.keys()):
+        coin_list = tracking[chat_id]
+        if not coin_list:
+            del tracking[chat_id]  # Удаляем пустые списки
+            logger.info(f"🗑️ Удалён пустой список пользователей: chat_id={chat_id}")
+            continue
 
-    telethon_client = context.bot_data.get("telethon_client")
-    if telethon_client is None:
-        logger.warning("Telethon-клиент не найден в контексте.")
-        return
-
-    # Проходим по всем пользователям и их спискам монет
-    for chat_id, coin_list in list(state.tracking.items()):
-        # Создаём копию списка, чтобы безопасно удалять элементы во время итерации
         for coin in list(coin_list):
-            price = await fetch_price(coin.symbol)
+            price = await fetch_price(coin.symbol, http_client)
             if price is None:
-                continue  # Пропускаем, если не получили цену
+                continue
 
             reached = False
             if coin.direction == "above" and price >= coin.target_price:
@@ -185,80 +113,156 @@ async def price_monitor_loop(context: ContextTypes.DEFAULT_TYPE) -> None:
                 reached = True
 
             if reached:
-                # Отправляем команду в группу через Telethon
-                command_text = f"/gm@PushoverAlerterBot"
-                try:
-                    await telethon_send_message(telethon_client, command_text)
-                    logger.info(f"✅ Уведомление отправлено для {coin.symbol} (цена: {price:.2f})")
-                except Exception as e:
-                    logger.error(f"❌ Не удалось отправить уведомление для {coin.symbol}: {e}")
-
-                # Удаляем только эту монету из списка (не весь chat_id!)
+                message = (
+                    f"🔔 Уведомление о цене!\n"
+                    f"Монета: {coin.symbol}\n"
+                    f"Цель: {coin.target_price} ({coin.direction})\n"
+                    f"Текущая цена: {price:.6f}".rstrip('0').rstrip('.')
+                )
+                await telethon_send_message(telethon_client, message)
                 coin_list.remove(coin)
-                logger.info(f"🗑️ Удалено отслеживание: {coin.symbol} для chat_id {chat_id}")
+                logger.info(f"✅ Удалена монета {coin.symbol} из списка {chat_id} (цена достигнута)")
 
-# ===== Инициализация Telethon =====
-async def init_telethon_client() -> TelegramClient:
-    if SESSION_STRING:
-        client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+
+# --- Команды бота ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        "Привет! Я бот для отслеживания цен криптовалют.\n"
+        "Используй /add <символ> <цена> <above/below> для добавления монеты.\n"
+        "Например: /add BTC 60000 above"
+    )
+
+
+async def add_coin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args or len(context.args) != 3:
+        await update.message.reply_text(
+            "Использование: /add <символ> <цена> <above/below>\n"
+            "Пример: /add BTC 60000 above"
+        )
+        return
+
+    symbol = context.args[0].upper()
+    try:
+        target_price = float(context.args[1])
+    except ValueError:
+        await update.message.reply_text("Цена должна быть числом.")
+        return
+
+    direction = context.args[2].lower()
+    if direction not in ("above", "below"):
+        await update.message.reply_text("Направление должно быть 'above' или 'below'.")
+        return
+
+    coin = CoinInfo(symbol=symbol, target_price=target_price, direction=direction)
+
+    tracking = context.bot_data["tracking"]
+    chat_id = update.effective_chat.id
+    if chat_id not in tracking:
+        tracking[chat_id] = []
+
+    if coin in tracking[chat_id]:
+        await update.message.reply_text(f"Монета {symbol} уже отслеживается.")
+        return
+
+    tracking[chat_id].append(coin)
+    await update.message.reply_text(
+        f"✅ Добавлена монета {symbol} с целью {target_price:.6f} ({direction})".rstrip('0').rstrip('.')
+    )
+
+
+async def remove_coin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Использование: /remove <символ>")
+        return
+
+    symbol = context.args[0].upper()
+    tracking = context.bot_data["tracking"]
+    chat_id = update.effective_chat.id
+
+    if chat_id not in tracking:
+        await update.message.reply_text("У вас нет отслеживаемых монет.")
+        return
+
+    coin_list = tracking[chat_id]
+    removed = None
+    for coin in coin_list:
+        if coin.symbol == symbol:
+            removed = coin
+            break
+
+    if removed:
+        coin_list.remove(removed)
+        await update.message.reply_text(
+            f"❌ Удалена монета {removed.symbol} с целью {removed.target_price:.6f} ({removed.direction})".rstrip('0').rstrip('.')
+        )
     else:
-        client = TelegramClient('telethon_session', API_ID, API_HASH)
+        await update.message.reply_text(f"Монета {symbol} не найдена в вашем списке.")
 
-    await client.start()
-    logger.info("✅ Telethon-клиент авторизован.")
-    return client
 
-# ===== Flask-сервер для Render.com =====
-app_flask = Flask(__name__)
+async def list_coins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    tracking = context.bot_data["tracking"]
+    chat_id = update.effective_chat.id
 
-@app_flask.route('/')
-def health():
-    return "✅ MEXC Bot is running on Render.com!", 200
+    if chat_id not in tracking or not tracking[chat_id]:
+        await update.message.reply_text("У вас нет отслеживаемых монет.")
+        return
 
-# ===== Главный запуск =====
-async def main():
-    # 1. Запускаем Telethon
+    coins = tracking[chat_id]
+    message = "📋 Ваши отслеживаемые монеты:\n"
+    for coin in coins:
+        message += f"• {coin.symbol}: {coin.target_price:.6f} ({coin.direction})\n".rstrip('0').rstrip('.')
+    await update.message.reply_text(message)
+
+
+async def clear_coins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    tracking = context.bot_data["tracking"]
+    chat_id = update.effective_chat.id
+    if chat_id in tracking:
+        tracking[chat_id].clear()
+        await update.message.reply_text("🗑️ Все монеты удалены из вашего списка.")
+    else:
+        await update.message.reply_text("Ваш список пуст.")
+
+
+# --- Главная функция ---
+async def main() -> None:
+    # Инициализация Telethon
     telethon_client = await init_telethon_client()
 
-    # 2. Создаём Telegram-бота
+    # Создание HTTP-клиента (один на весь бот)
+    http_client = httpx.AsyncClient(timeout=10)
+
+    # Создание бота
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).job_queue(JobQueue()).build()
 
-    # Регистрация команд
+    # Сохраняем клиенты в bot_data
+    app.bot_data["telethon_client"] = telethon_client
+    app.bot_data["http_client"] = http_client
+    app.bot_data["tracking"] = {}  # {chat_id: List[CoinInfo]}
+
+    # Регистрация обработчиков
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add_coin))
-    app.add_handler(CommandHandler("list", list_coins))
     app.add_handler(CommandHandler("remove", remove_coin))
+    app.add_handler(CommandHandler("list", list_coins))
+    app.add_handler(CommandHandler("clear", clear_coins))
 
-    # Установка команд
-    await app.bot.set_my_commands([
-        BotCommand("start", "Показать приветственное сообщение"),
-        BotCommand("add", "Добавить монету для отслеживания"),
-        BotCommand("list", "Показать все отслеживаемые монеты"),
-        BotCommand("remove", "Удалить монету по номеру"),
-    ])
+    # Запуск мониторинга цен каждые 2 секунды
+    app.job_queue.run_repeating(price_monitor_loop, interval=CHECK_INTERVAL, first=1)
 
-    # 👇 ВАЖНО: Инициализируем tracking как список, а не словарь
-    app.bot_data["tracking"] = {}  # {chat_id: [CoinInfo, ...]}
-    app.bot_data["telethon_client"] = telethon_client
-
-    # Запускаем мониторинг каждые 30 сек (можно уменьшить до 10, если нужно быстрее)
-    app.job_queue.run_repeating(price_monitor_loop, interval=2, first=0)
-
-    # Запускаем бота
+    logger.info("🚀 Бот запущен. Ожидание команд...")
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
 
-    # Запускаем Flask-сервер в отдельном потоке (для Render)
-    from threading import Thread
-    def run_flask():
-        app_flask.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
-
-    flask_thread = Thread(target=run_flask, daemon=True)
-    flask_thread.start()
-
-    # Ждём завершения (бесконечно)
+    # Запуск в бесконечном цикле
     await asyncio.Event().wait()
 
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 Бот остановлен пользователем.")
+    except Exception as e:
+        logger.error(f"❌ Критическая ошибка: {e}")
