@@ -21,7 +21,7 @@ TELETHON_API_ID = int(os.getenv("API_ID"))
 TELETHON_API_HASH = os.getenv("API_HASH")
 TELETHON_SESSION_STRING = os.getenv("TELETHON_SESSION_STRING")
 CHECK_INTERVAL = 2  # секунд
-TARGET_CHAT_ID = int(os.getenv("TARGET_CHAT_ID"))  # куда отправлять уведомления
+TARGET_CHAT_ID = os.getenv("TARGET_GROUP_USERNAME")  # куда отправлять уведомления
 
 # --- Логирование ---
 logging.basicConfig(
@@ -266,4 +266,5 @@ if __name__ == "__main__":
         logger.info("🛑 Бот остановлен пользователем.")
     except Exception as e:
         logger.error(f"❌ Критическая ошибка: {e}")
+
 
