@@ -3,6 +3,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+from decimal import Decimal
 
 import httpx
 from flask import Flask
@@ -20,10 +21,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 MEXC_TICKER_URL = "https://api.mexc.com/api/v3/ticker/price"
-API_ID = 32990800
-API_HASH = "f14259b31ea4bc638814833d6de13bd5"
-TARGET_GROUP_USERNAME = "@alertgomno2"
-TELEGRAM_BOT_TOKEN = "8213546201:AAFIFDmFqtjibgd9CkfsGGgWnb1_tTXfe8c"
+API_ID = int(os.getenv("API_ID", 0))  # 👈 Возвращает 0, если не задано
+API_HASH = os.getenv("API_HASH", "")
+TARGET_GROUP_USERNAME = os.getenv("TARGET_GROUP_USERNAME", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+
 
 # 🚨 ВАЖНО: Сессия Telethon передаётся через переменную окружения
 SESSION_STRING = os.getenv("TELETHON_SESSION_STRING")
@@ -109,7 +111,7 @@ async def add_coin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     new_coin = CoinInfo(symbol=symbol, target_price=target_price, direction=direction)
     state.tracking[chat_id].append(new_coin)
 
-    await update.message.reply_text(f"✅ {symbol} ({direction} {target_price:.2f}) добавлен в отслеживание!")
+    await update.message.reply_text(f"✅ {symbol} ({direction} {target_price:.4f}) добавлен в отслеживание!")
 
 async def list_coins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
@@ -120,7 +122,7 @@ async def list_coins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     coins = state.tracking[chat_id]
     message = "📋 Ваши отслеживаемые монеты:\n\n"
     for i, coin in enumerate(coins, 1):
-        message += f"{i}. {coin.symbol} → {coin.direction} {coin.target_price:.2f}\n"
+        message += f"{i}. {coin.symbol} → {coin.direction} {coin.target_price:.4f}\n"
 
     await update.message.reply_text(message)
 
