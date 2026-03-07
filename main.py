@@ -84,14 +84,6 @@ async def price_monitor_loop(context: ContextTypes.DEFAULT_TYPE) -> None:
     tracking = context.bot_data["tracking"]  # {chat_id: List[CoinInfo]}
 
     # Проверка подключения Telethon
-    if not await telethon_client.is_connected():
-        logger.warning("⚠️ Telethon клиент не подключен. Переподключение...")
-        try:
-            await telethon_client.connect()
-            logger.info("✅ Telethon переподключен.")
-        except Exception as e:
-            logger.error(f"❌ Не удалось переподключить Telethon: {e}")
-            return
 
     # Копируем список для безопасного итерирования
     for chat_id in list(tracking.keys()):
