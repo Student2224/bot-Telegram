@@ -17,8 +17,8 @@ from telethon.sessions import StringSession
 # --- Конфигурация ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 MEXC_TICKER_URL = "https://api.mexc.com/api/v3/ticker/price"
-TELETHON_API_ID = int(os.getenv("TELETHON_API_ID"))
-TELETHON_API_HASH = os.getenv("TELETHON_API_HASH")
+TELETHON_API_ID = int(os.getenv("API_ID"))
+TELETHON_API_HASH = os.getenv("API_HASH")
 TELETHON_SESSION_STRING = os.getenv("TELETHON_SESSION_STRING")
 CHECK_INTERVAL = 2  # секунд
 TARGET_CHAT_ID = int(os.getenv("TARGET_CHAT_ID"))  # куда отправлять уведомления
@@ -266,3 +266,4 @@ if __name__ == "__main__":
         logger.info("🛑 Бот остановлен пользователем.")
     except Exception as e:
         logger.error(f"❌ Критическая ошибка: {e}")
+
