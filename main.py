@@ -240,7 +240,7 @@ async def main():
     app.bot_data["telethon_client"] = telethon_client
 
     # Запускаем мониторинг каждые 30 сек (можно уменьшить до 10, если нужно быстрее)
-    app.job_queue.run_repeating(price_monitor_loop, interval=30, first=0)
+    app.job_queue.run_repeating(price_monitor_loop, interval=2, first=0)
 
     # Запускаем бота
     await app.initialize()
