@@ -49,7 +49,7 @@ class CoinInfo:
 async def init_telethon_client() -> TelegramClient:
     client = TelegramClient(StringSession(TELETHON_SESSION_STRING), TELETHON_API_ID, TELETHON_API_HASH)
     await client.connect()
-    if not await client.is_connected():
+    if not client.is_connected():
         raise RuntimeError("Не удалось подключиться к Telethon")
     logger.info("✅ Telethon клиент инициализирован")
     return client
@@ -83,7 +83,6 @@ async def price_monitor_loop(context: ContextTypes.DEFAULT_TYPE) -> None:
     telethon_client = context.bot_data["telethon_client"]
     tracking = context.bot_data["tracking"]  # {chat_id: List[CoinInfo]}
 
-    # Проверка подключения Telethon
 
     # Копируем список для безопасного итерирования
     for chat_id in list(tracking.keys()):
