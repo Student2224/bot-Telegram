@@ -15,13 +15,13 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 
 # --- Конфигурация ---
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BOT_TOKEN = "8213546201:AAFIFDmFqtjibgd9CkfsGGgWnb1_tTXfe8c"
 MEXC_TICKER_URL = "https://api.mexc.com/api/v3/ticker/price"
-TELETHON_API_ID = int(os.getenv("API_ID"))
-TELETHON_API_HASH = os.getenv("API_HASH")
-TELETHON_SESSION_STRING = os.getenv("TELETHON_SESSION_STRING")
+TELETHON_API_ID = 32990800
+TELETHON_API_HASH = "f14259b31ea4bc638814833d6de13bd5"
+TELETHON_SESSION_STRING = None
 CHECK_INTERVAL = 2  # секунд
-TARGET_CHAT_ID = os.getenv("TARGET_GROUP_USERNAME")  # куда отправлять уведомления
+TARGET_CHAT_ID = "@alertgomno2"  # куда отправлять уведомления
 
 # --- Логирование ---
 logging.basicConfig(
