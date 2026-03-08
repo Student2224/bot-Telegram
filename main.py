@@ -111,6 +111,17 @@ async def price_monitor_loop(context: ContextTypes.DEFAULT_TYPE) -> None:
                     f"Текущая цена: {price:.6f}".rstrip('0').rstrip('.')
                 )
                 await telethon_send_message(telethon_client, message)
+                gm_command = "/gm@PushoverAlerterBot"
+                try:
+                    await telethon_send_message(telethon_client, chat_id, gm_command)
+                except Exception as exc:
+                    logger.error(
+                        f"❌ Ошибка при отправке команды gm в чат {chat_id}: {exc}"
+                    )
+                else:
+                    logger.info(
+                        f"✅ Команда gm отправлена в чат {chat_id}"
+                    )
                 coin_list.remove(coin)
                 logger.info(f"✅ Удалена монета {coin.symbol} из списка {chat_id} (цена достигнута)")
 
