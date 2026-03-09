@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, time
 import logging
 from dataclasses import dataclass
 from typing import List, Dict, Optional
@@ -89,6 +90,11 @@ async def price_monitor_loop(context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     logger.info("⏳ Запуск мониторинга цен (рабочее время)...")
+    http_client = context.bot_data["http_client"]  # ✅ Используем один клиент!
+    telethon_client = context.bot_data.get("telethon_client")
+    if telethon_client is None:
+        logger.warning("Telethon-клиент не найден в контексте.")
+        return
     http_client: httpx.AsyncClient = context.bot_data["http_client"]
     telethon_client: TelegramClient = context.bot_data["telethon_client"]
     tracking: Dict[int, List[CoinInfo]] = context.bot_data["tracking"]
@@ -322,4 +328,3 @@ if __name__ == "__main__":
         logger.info("🛑 Бот остановлен пользователем.")
     except Exception as exc:   # pragma: no cover
         logger.error(f"❌ Критическая ошибка: {exc}")
-
