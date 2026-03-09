@@ -25,7 +25,7 @@ TELETHON_API_ID = os.getenv("TELETHON_API_ID")
 TELETHON_API_HASH = os.getenv("TELETHON_API_HASH")
 TELETHON_SESSION_STRING = os.getenv("TELETHON_SESSION_STRING")
 CHECK_INTERVAL = 2          # секунд
-TARGET_CHAT_ID = "@alertgomno2"
+TARGET_CHAT_ID = "@alergt"
 
 # --------------------------- Логирование ---------------------------
 logging.basicConfig(
@@ -329,4 +329,5 @@ if __name__ == "__main__":
         logger.info("🛑 Бот остановлен пользователем.")
     except Exception as exc:   # pragma: no cover
         logger.error(f"❌ Критическая ошибка: {exc}")
+
 
