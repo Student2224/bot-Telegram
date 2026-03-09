@@ -79,6 +79,16 @@ async def price_monitor_loop(context: ContextTypes.DEFAULT_TYPE) -> None:
     Цикл, который каждый CHECK_INTERVAL секунд проверяет цены всех
     монет, находящихся в словаре `tracking`.
     """
+    now = datetime.now().time()
+    start_time = time(5, 0)   # 5:00 AM
+    end_time = time(21, 0)    # 9:00 PM
+
+    # 🚫 Если сейчас не в рабочем интервале — выходим
+    if not (start_time <= now <= end_time):
+        logger.info("🕒 Сейчас вне рабочего времени (5:00–21:00). Пропускаем мониторинг.")
+        return
+
+    logger.info("⏳ Запуск мониторинга цен (рабочее время)...")
     http_client: httpx.AsyncClient = context.bot_data["http_client"]
     telethon_client: TelegramClient = context.bot_data["telethon_client"]
     tracking: Dict[int, List[CoinInfo]] = context.bot_data["tracking"]
@@ -312,3 +322,4 @@ if __name__ == "__main__":
         logger.info("🛑 Бот остановлен пользователем.")
     except Exception as exc:   # pragma: no cover
         logger.error(f"❌ Критическая ошибка: {exc}")
+
