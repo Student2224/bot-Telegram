@@ -14,15 +14,16 @@ from telegram.ext import (
 )
 from telethon import TelegramClient
 from telethon.sessions import StringSession
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 # --------------------------- Конфигурация ---------------------------
-TELEGRAM_BOT_TOKEN = "8213546201:AAFIFDmFqtjibgd9CkfsGGgWnb1_tTXfe8c"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 MEXC_TICKER_URL = "https://fapi.binance.com/fapi/v1/ticker/price"
-TELETHON_API_ID = 32990800
-TELETHON_API_HASH = "f14259b31ea4bc638814833d6de13bd5"
-TELETHON_SESSION_STRING = (
-    "1AZWarzsBuy5gnNAURevyIk3U5yeLAjU2F_SkWsFfv54IjnuZoyhxmpmnvLiKzHt2-gBopeQ1T2w7_nYi0TY6GtuRyKpOmg8VDnUWoOEU-dt5zL-XfhF_leCJTEZb-XBHWi9ttSi5P5LohysH4Y2jFuGot7Nsj2ZRpKenWQewMR5STjYYJ8pStQH_7fI3tEAdff36YXX-af8gQTozV6EelWmJVRK3HaFJ1p94tvIrQNPhMa1om5k1zPpIGHBI6Z3HMpCqZOZaEqyRz3gpsPZOvfVdcJcPUzIbEMAmz2I6HGu0F-0kWsEAbHrkVk1-3HMCxg9QL-PCAHWJgN4p5-9rfVRBosO0jP0="
-)
+TELETHON_API_ID = os.getenv("TELETHON_API_ID")
+TELETHON_API_HASH = os.getenv("TELETHON_API_HASH")
+TELETHON_SESSION_STRING = os.getenv("TELETHON_SESSION_STRING")
 CHECK_INTERVAL = 2          # секунд
 TARGET_CHAT_ID = "@alertgomno2"
 
@@ -328,3 +329,4 @@ if __name__ == "__main__":
         logger.info("🛑 Бот остановлен пользователем.")
     except Exception as exc:   # pragma: no cover
         logger.error(f"❌ Критическая ошибка: {exc}")
+
