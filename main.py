@@ -81,14 +81,14 @@ async def price_monitor_loop(context: ContextTypes.DEFAULT_TYPE) -> None:
     Цикл, который каждый CHECK_INTERVAL секунд проверяет цены всех
     монет, находящихся в словаре `tracking`.
     """
-    now = datetime.now().time()
-    start_time = time(5, 0)   # 5:00 AM
-    end_time = time(21, 0)    # 9:00 PM
+    #now = datetime.now().time()
+    #start_time = time(5, 0)   # 5:00 AM
+    #end_time = time(21, 0)    # 9:00 PM
 
     # 🚫 Если сейчас не в рабочем интервале — выходим
-    if not (start_time <= now <= end_time):
-        logger.info("🕒 Сейчас вне рабочего времени (5:00–21:00). Пропускаем мониторинг.")
-        return
+    #if not (start_time <= now <= end_time):
+        #logger.info("🕒 Сейчас вне рабочего времени (5:00–21:00). Пропускаем мониторинг.")
+        #return
 
     logger.info("⏳ Запуск мониторинга цен (рабочее время)...")
     http_client = context.bot_data["http_client"]  # ✅ Используем один клиент!
