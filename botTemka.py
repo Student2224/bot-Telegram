@@ -187,7 +187,10 @@ async def main():
                     )
                     tracking_prices[symbol] = current_price
                     logger.info(f"База для {symbol} обновлена на ${current_price:.4f}")
-            
+                elif growth <= -2.0:
+                    tracking_prices[symbol] = current_price
+            else:
+                tracking_prices[symbol] = current_price
             # Пауза между проверками
             await asyncio.sleep(CHECK_INTERVAL)
 
