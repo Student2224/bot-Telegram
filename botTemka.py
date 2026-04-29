@@ -2,6 +2,7 @@ import time
 import logging
 import asyncio
 import os
+import datetime
 import requests
 from dotenv import load_dotenv
 from telegram import Bot
@@ -13,7 +14,7 @@ load_dotenv()
 # --- Настройки ---
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID='@farmtemki'  # Дефолтное значение
-GROWTH_THRESHOLD = 2.4  # Для теста стоит 1.0, можно вернуть на 5.0
+GROWTH_THRESHOLD = 2.4 # Для теста стоит 1.0, можно вернуть на 5.0
 CHECK_INTERVAL = 5  # Проверка раз в 30 секунд
 
 # Кэш для сокращения API-запросов
@@ -109,59 +110,89 @@ async def send_telegram_message(bot, symbol: str, start_price: float,
 
 async def main():
     """Основной цикл работы бота"""
+    if not TELEGRAM_BOT_TOKEN:
+        logger.error("Токен бота не найден! Проверьте файл .env")
+        return
+
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     bot = application.bot
     
-    logger.info("Бот запущен. Инициализация...")
-    
-    SYMBOLS = get_all_active_symbols()
-    
-    if not SYMBOLS:
-        logger.error("Список монет пуст. Завершение работы.")
-        return
-    
-    logger.info(f"Получение стартовых цен для {len(SYMBOLS)} монет...")
-    initial_prices = get_bulk_prices(SYMBOLS)
-    
-    if not initial_prices:
-        logger.error("Не удалось получить стартовые цены. Завершение работы.")
-        return
-    
-        logger.info(f"Старт мониторинга. Интервал: {CHECK_INTERVAL}с. Порог: {GROWTH_THRESHOLD}%")
-    
-    # База для трекинга. Храним цену, от которой считаем рост.
-    # Изначально это стартовая цена, но после срабатывания мы её обновим.
-    tracking_prices = initial_prices.copy()
+    logger.info("Бот запущен. Режим работы: 01:57 - 03:10")
     
     while True:
-        current_prices = get_bulk_prices(list(tracking_prices.keys()))
+        now = datetime.datetime.now()
         
-        for symbol, base_price in tracking_prices.items():
-            current_price = current_prices.get(symbol)
-            
-            if current_price is None:
-                continue
-            
-            growth = ((current_price - base_price) / base_price) * 100
-            
-            # Если рост превысил порог — уведомляем и обновляем базу
-            if growth >= GROWTH_THRESHOLD:
-                await send_telegram_message(
-                    bot, symbol, base_price, 
-                    current_price, growth
-                )
-                # СДВИГ ЦЕЛИ: новая база = текущая цена
-                tracking_prices[symbol] = current_price
-                logger.info(f"База для {symbol} обновлена на ${current_price:.4f}")
-            
-            # Опционально: можно добавить сброс, если цена УПАЛА (чтобы поймать новый импульс)
-            # Например, если цена упала на 10% от нашей базы, сбрасываем базу на текущую,
-            # чтобы мониторинг не был привязан к старым максимумам.
-            elif growth <= -2.0:
-                tracking_prices[symbol] = current_price
+        # Устанавливаем время начала (01:57) и конца (03:10) на сегодня
+        start_time = now.replace(hour=1, minute=57, second=0, microsecond=0)
+        end_time = now.replace(hour=2, minute=30, second=0, microsecond=0)
         
-        # Асинхронная пауза
-        await asyncio.sleep(CHECK_INTERVAL)
+        # Если сейчас время УЖЕ после окончания периода (после 03:10)
+        if now >= end_time:
+            # Переносим начало на завтра
+            start_time += datetime.timedelta(days=1)
+            end_time += datetime.timedelta(days=1)
+            wait_seconds = (start_time - now).total_seconds()
+            logger.info(f"Вне рабочего времени. Сон до {start_time.strftime('%H:%M:%S')} (завтра)")
+            await asyncio.sleep(wait_seconds)
+            continue
+        
+        # Если сейчас время ДО начала периода (до 01:57)
+        if now < start_time:
+            wait_seconds = (start_time - now).total_seconds()
+            logger.info(f"Ожидание начала периода (01:57). Сон до {start_time.strftime('%H:%M:%S')}")
+            await asyncio.sleep(wait_seconds)
+            continue
+        
+        # --- ПЕРИОД МОНИТОРИНГА (с 01:57 до 03:10) ---
+        logger.info(f"*** СТАРТ ПЕРИОДА МОНИТОРИНГА (до 02:30) ***")
+        
+        # Инициализация данных для этого сеанса
+        SYMBOLS = get_all_active_symbols()
+        if not SYMBOLS:
+            logger.error("Список монет пуст. Пропуск сеанса.")
+            await asyncio.sleep((end_time - datetime.datetime.now()).total_seconds())
+            continue
+        
+        logger.info(f"Получение стартовых цен для {len(SYMBOLS)} монет...")
+        initial_prices = get_bulk_prices(SYMBOLS)
+        if not initial_prices:
+            logger.error("Не удалось получить цены. Пропуск сеанса.")
+            await asyncio.sleep((end_time - datetime.datetime.now()).total_seconds())
+            continue
+        
+        logger.info(f"Мониторинг активен. Порог: {GROWTH_THRESHOLD}%, Интервал: {CHECK_INTERVAL}с.")
+        tracking_prices = initial_prices.copy()
+        
+        # Сам цикл мониторинга
+        while True:
+            now = datetime.datetime.now()
+            # Проверяем, не истекло ли время (03:10)
+            if now >= end_time:
+                logger.info("*** ПЕРИОД МОНИТОРИНГА ЗАКОНЧИЛСЯ (03:10) ***")
+                break  # Выходим из цикла мониторинга, идем в начало while True (спать до завтра)
+            
+            current_prices = get_bulk_prices(list(tracking_prices.keys()))
+            
+            for symbol, base_price in tracking_prices.items():
+                current_price = current_prices.get(symbol)
+                if current_price is None:
+                    continue
+                
+                growth = ((current_price - base_price) / base_price) * 100
+                
+                if growth >= GROWTH_THRESHOLD:
+                    await send_telegram_message(
+                        bot, symbol, base_price, 
+                        current_price, growth
+                    )
+                    tracking_prices[symbol] = current_price
+                    logger.info(f"База для {symbol} обновлена на ${current_price:.4f}")
+                elif growth <= -2.0:
+                    tracking_prices[symbol] = current_price
+            else:
+                tracking_prices[symbol] = current_price
+            # Пауза между проверками
+            await asyncio.sleep(CHECK_INTERVAL)
 
 if __name__ == '__main__':
     try:
