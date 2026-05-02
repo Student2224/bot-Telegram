@@ -223,8 +223,8 @@ async def main():
         now = datetime.datetime.now()
         
         # Устанавливаем время начала (01:57) и конца (03:10) на сегодня
-        start_time = now.replace(hour=19, minute=50, second=0, microsecond=0)
-        end_time = now.replace(hour=20, minute=35, second=0, microsecond=0)
+        start_time = now.replace(hour=23, minute=57, second=0, microsecond=0)
+        end_time = now.replace(hour=1, minute=0, second=0, microsecond=0)
         
         # Если время уже после окончания периода
         if now >= end_time:
