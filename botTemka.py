@@ -222,28 +222,45 @@ async def main():
     while True:
         now = datetime.datetime.now()
         
-        # Устанавливаем время начала (01:57) и конца (03:10) на сегодня
-        start_time = now.replace(hour=23, minute=57, second=0, microsecond=0)
-        end_time = now.replace(hour=1, minute=0, second=0, microsecond=0)
+        # Настройки времени (можно менять на любые интервалы, включая ночные)
+        start_hour, start_minute = 23, 57
+        end_hour, end_minute = 1, 0
         
-        # Если время уже после окончания периода
-        if now >= end_time:
-            start_time += datetime.timedelta(days=1)
+        # Устанавливаем время начала на сегодня
+        start_time = now.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
+        end_time = now.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
+        
+        # Корректировка для интервалов, пересекающих полночь (например, 23:57 - 01:00)
+        if end_time <= start_time:  # Если конец меньше или равен началу -> интервал через сутки
             end_time += datetime.timedelta(days=1)
+            # Если сейчас время между 00:00 и end_time (01:00), значит период начался вчера
+            if now.time() < now.replace(hour=end_hour, minute=end_minute).time():
+                start_time -= datetime.timedelta(days=1)
+        
+        # Проверяем, внутри ли мы периода
+        if start_time <= now < end_time:
+            pass  # Мы внутри периода, ничего не делаем, идем дальше
+        elif now < start_time:
+            # Еще не началось
             wait_seconds = (start_time - now).total_seconds()
-            logger.info(f"Вне рабочего времени. Сон до {start_time.strftime('%H:%M:%S')} (завтра)")
+            logger.info(f"Ожидание начала периода ({start_hour:02d}:{start_minute:02d}). Сон до {start_time.strftime('%H:%M:%S')}")
+            await asyncio.sleep(wait_seconds)
+            continue
+        else:
+            # Уже закончилось (now >= end_time)
+            # Следующий период начнется сегодня (если мы еще не пропустили) или завтра
+            next_start = start_time + datetime.timedelta(days=1)
+            # Если сегодняшний период уже прошел, берем завтрашний
+            if now >= next_start:
+                next_start += datetime.timedelta(days=1)
+            
+            wait_seconds = (next_start - now).total_seconds()
+            logger.info(f"Вне рабочего времени. Сон до {next_start.strftime('%H:%M:%S')} (след. запуск)")
             await asyncio.sleep(wait_seconds)
             continue
         
-        # Если время до начала периода
-        if now < start_time:
-            wait_seconds = (start_time - now).total_seconds()
-            logger.info(f"Ожидание начала периода (01:57). Сон до {start_time.strftime('%H:%M:%S')}")
-            await asyncio.sleep(wait_seconds)
-            continue
-        
-                                # --- ПЕРИОД МОНИТОРИНГА (с 01:57 до 03:10) ---
-        logger.info(f"*** СТАРТ ПЕРИОДА МОНИТОРИНГА (до 03:10) ***")
+        # --- ПЕРИОД МОНИТОРИНГА ---
+        logger.info(f"*** СТАРТ ПЕРИОДА МОНИТОРИНГА (до {end_hour:02d}:{end_minute:02d}) ***")
         
         SYMBOLS = get_all_active_symbols()
         if not SYMBOLS:
